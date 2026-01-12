@@ -1,0 +1,61 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4F46E5'}}}%%
+
+sequenceDiagram
+    autonumber
+    participant EX as 📞 Exotel
+    participant NG as 🌐 ngrok
+    participant API as 🖥️ Express API
+    participant Q as 📋 BullMQ
+    participant DW as ⬇️ Download Worker
+    participant TW as 🎙️ Transcribe Worker
+    participant AW as 🤖 Analysis Worker
+    participant NW as 📤 Notify Worker
+    participant DB as 💾 SQLite
+    participant FS as 📁 File Storage
+
+    Note over EX,FS: PHASE 1: Call Recording Ingestion
+    EX->>NG: POST /webhook/exotel/recording
+    NG->>API: Forward request
+    API->>API: Validate signature
+    API->>DB: Create call record (status: pending)
+    API->>Q: Queue download job
+    API-->>EX: 200 OK
+
+    Note over EX,FS: PHASE 2: Audio Download
+    Q->>DW: Process download job
+    DW->>EX: Fetch recording URL
+    EX-->>DW: Audio file (WAV/MP3)
+    DW->>FS: Save to ./storage/audio/{call_id}.wav
+    DW->>DB: Update call (local_audio_path, status: downloaded)
+    DW->>Q: Queue transcription job
+
+    Note over EX,FS: PHASE 3: Transcription
+    Q->>TW: Process transcription job
+    TW->>FS: Read audio file
+    TW->>TW: Call Groq Whisper API
+    TW->>TW: Receive transcript with timestamps
+    TW->>TW: Apply speaker diarization logic
+    TW->>DB: Save transcript (content, segments, language)
+    TW->>DB: Update call (status: transcribed)
+    TW->>Q: Queue analysis job
+
+    Note over EX,FS: PHASE 4: AI Analysis
+    Q->>AW: Process analysis job
+    AW->>DB: Fetch transcript
+    AW->>AW: Build scoring prompt
+    AW->>AW: Call OpenRouter API (DeepSeek/GPT)
+    AW->>AW: Parse JSON response
+    AW->>DB: Save analysis (scores, issues, recommendations)
+    AW->>DB: Update call (status: analyzed)
+    
+    alt Score < Threshold OR Critical Issue
+        AW->>Q: Queue notification job
+    end
+
+    Note over EX,FS: PHASE 5: Notification
+    Q->>NW: Process notification job
+    NW->>DB: Fetch analysis details
+    NW->>NW: Format message
+    NW->>NW: Log to console (dev mode)
+    NW->>DB: Save notification record
+    NW->>FS: Append to daily CSV export

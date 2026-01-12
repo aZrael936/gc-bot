@@ -1,0 +1,59 @@
+%%{init: {'theme': 'base'}}%%
+
+flowchart LR
+    subgraph P1["📦 PHASE 1<br/>Foundation"]
+        P1A[Project Setup]
+        P1B[SQLite Schema]
+        P1C[Redis + BullMQ]
+        P1D[Express Server]
+        P1T{{"✅ TEST:<br/>Health check<br/>DB queries<br/>Queue jobs"}}
+    end
+
+    subgraph P2["📞 PHASE 2<br/>Call Ingestion"]
+        P2A[Exotel Webhook]
+        P2B[ngrok Tunnel]
+        P2C[Download Worker]
+        P2D[File Storage]
+        P2T{{"✅ TEST:<br/>Webhook received<br/>Audio downloaded<br/>Record created"}}
+    end
+
+    subgraph P3["🎙️ PHASE 3<br/>Transcription"]
+        P3A[Whisper Setup]
+        P3B[Transcription Worker]
+        P3C[Language Detection]
+        P3D[Speaker Diarization]
+        P3T{{"✅ TEST:<br/>Hindi transcribed<br/>English transcribed<br/>Speakers labeled"}}
+    end
+
+    subgraph P4["🤖 PHASE 4<br/>AI Analysis"]
+        P4A[Ollama Setup]
+        P4B[Scoring Prompt]
+        P4C[Analysis Worker]
+        P4D[JSON Parser]
+        P4T{{"✅ TEST:<br/>Scores generated<br/>Issues identified<br/>Recommendations"}}
+    end
+
+    subgraph P5["📤 PHASE 5<br/>Output Layer"]
+        P5A[CSV Export]
+        P5B[Excel Export]
+        P5C[Notifications]
+        P5D[Daily Reports]
+        P5T{{"✅ TEST:<br/>Files exported<br/>Alerts triggered<br/>Reports generated"}}
+    end
+
+    subgraph P6["🚀 PHASE 6<br/>Integration"]
+        P6A[E2E Tests]
+        P6B[Dashboard]
+        P6C[Documentation]
+        P6D[Demo Ready]
+        P6T{{"✅ TEST:<br/>Full pipeline<br/>UI works<br/>5+ calls processed"}}
+    end
+
+    P1 --> P2 --> P3 --> P4 --> P5 --> P6
+
+    style P1 fill:#DBEAFE,stroke:#3B82F6
+    style P2 fill:#FEE2E2,stroke:#EF4444
+    style P3 fill:#FEF3C7,stroke:#F59E0B
+    style P4 fill:#E0E7FF,stroke:#6366F1
+    style P5 fill:#FCE7F3,stroke:#EC4899
+    style P6 fill:#ECFDF5,stroke:#10B981

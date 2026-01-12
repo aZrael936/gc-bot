@@ -1,0 +1,42 @@
+%%{init: {'theme': 'base'}}%%
+
+flowchart LR
+    subgraph LOCAL["💻 LOCAL DEVELOPMENT<br/>(Zero Cost)"]
+        L1["Express Server<br/>Port 3000"]
+        L2["SQLite<br/>./database/"]
+        L3["BullMQ + Redis<br/>Docker"]
+        L4["Local Files<br/>./storage/"]
+        L5["Whisper.cpp<br/>Local Model"]
+        L6["Ollama<br/>Mistral/Llama"]
+        L7["Console<br/>Notifications"]
+        L8["ngrok<br/>Tunnel"]
+    end
+
+    subgraph PROD["☁️ AWS PRODUCTION<br/>(₹5K-15K/month)"]
+        P1["Lambda + API Gateway<br/>Serverless"]
+        P2["RDS PostgreSQL<br/>db.t3.micro"]
+        P3["AWS SQS<br/>Managed Queue"]
+        P4["S3 Bucket<br/>ap-south-1"]
+        P5["Sarvam AI<br/>Hindi STT API"]
+        P6["OpenAI<br/>GPT-4o-mini"]
+        P7["WhatsApp BSP<br/>Interakt/AiSensy"]
+        P8["API Gateway<br/>Public URL"]
+    end
+
+    L1 -.->|"Minimal changes"| P1
+    L2 -.->|"Schema migration"| P2
+    L3 -.->|"Queue abstraction"| P3
+    L4 -.->|"Storage adapter"| P4
+    L5 -.->|"API swap"| P5
+    L6 -.->|"API swap"| P6
+    L7 -.->|"WhatsApp SDK"| P7
+    L8 -.->|"Not needed"| P8
+
+    style LOCAL fill:#ECFDF5,stroke:#10B981
+    style PROD fill:#DBEAFE,stroke:#3B82F6
+
+    classDef localNode fill:#D1FAE5,stroke:#059669
+    classDef prodNode fill:#BFDBFE,stroke:#2563EB
+    
+    class L1,L2,L3,L4,L5,L6,L7,L8 localNode
+    class P1,P2,P3,P4,P5,P6,P7,P8 prodNode

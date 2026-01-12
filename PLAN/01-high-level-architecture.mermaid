@@ -1,0 +1,51 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4F46E5', 'primaryTextColor': '#fff', 'primaryBorderColor': '#4338CA', 'lineColor': '#6366F1', 'secondaryColor': '#818CF8', 'tertiaryColor': '#C7D2FE'}}}%%
+
+flowchart TB
+    subgraph CLOUD["☁️ CLOUD SERVICES"]
+        EXOTEL["📞 Exotel<br/>Cloud Telephony"]
+    end
+
+    subgraph LOCAL["💻 YOUR LOCAL PC"]
+        subgraph INGRESS["🌐 Ingress Layer"]
+            NGROK["ngrok Tunnel<br/>Public URL → localhost"]
+            EXPRESS["Express Server<br/>Port 3000"]
+        end
+
+        subgraph PROCESSING["⚙️ Processing Layer"]
+            QUEUE["BullMQ + Redis<br/>Job Queue"]
+            DL_WORKER["Download Worker<br/>Fetch Audio"]
+            STT_WORKER["Transcription Worker<br/>Groq Whisper API"]
+            LLM_WORKER["Analysis Worker<br/>OpenRouter API"]
+        end
+
+        subgraph STORAGE["💾 Storage Layer"]
+            SQLITE[("SQLite DB<br/>./database/")]
+            FILES["Local Files<br/>./storage/"]
+        end
+
+        subgraph OUTPUT["📤 Output Layer"]
+            CSV["CSV/Excel Export"]
+            CONSOLE["Console Notifications"]
+            DASHBOARD["Web Dashboard"]
+        end
+    end
+
+    EXOTEL -->|"Webhook POST"| NGROK
+    NGROK --> EXPRESS
+    EXPRESS -->|"Queue Job"| QUEUE
+    QUEUE --> DL_WORKER
+    DL_WORKER -->|"Save Audio"| FILES
+    DL_WORKER -->|"Queue"| STT_WORKER
+    STT_WORKER -->|"Groq API"| SQLITE
+    STT_WORKER -->|"Queue"| LLM_WORKER
+    LLM_WORKER -->|"OpenRouter API"| SQLITE
+    SQLITE --> CSV
+    SQLITE --> CONSOLE
+    SQLITE --> DASHBOARD
+
+    style CLOUD fill:#FEE2E2,stroke:#EF4444
+    style LOCAL fill:#ECFDF5,stroke:#10B981
+    style INGRESS fill:#DBEAFE,stroke:#3B82F6
+    style PROCESSING fill:#FEF3C7,stroke:#F59E0B
+    style STORAGE fill:#E0E7FF,stroke:#6366F1
+    style OUTPUT fill:#FCE7F3,stroke:#EC4899

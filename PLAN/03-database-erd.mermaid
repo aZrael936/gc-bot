@@ -1,0 +1,83 @@
+%%{init: {'theme': 'base'}}%%
+
+erDiagram
+    ORGANIZATIONS ||--o{ USERS : has
+    ORGANIZATIONS ||--o{ CALLS : has
+    USERS ||--o{ CALLS : makes
+    CALLS ||--|| TRANSCRIPTS : has
+    CALLS ||--|| ANALYSES : has
+    CALLS ||--o{ NOTIFICATIONS : triggers
+    USERS ||--o{ NOTIFICATIONS : receives
+
+    ORGANIZATIONS {
+        text id PK "UUID"
+        text name "Company name"
+        json settings "Config JSON"
+        datetime created_at
+        datetime updated_at
+    }
+
+    USERS {
+        text id PK "UUID"
+        text org_id FK "Organization"
+        text name "Full name"
+        text email UK "Unique email"
+        text role "agent|manager|admin"
+        text whatsapp_number "For notifications"
+        datetime created_at
+    }
+
+    CALLS {
+        text id PK "UUID"
+        text org_id FK "Organization"
+        text agent_id FK "Agent user"
+        text exotel_call_sid UK "Exotel reference"
+        text recording_url "Original URL"
+        text local_audio_path "Local storage path"
+        int duration_seconds
+        text call_type "sales|support|other"
+        text caller_number
+        text callee_number
+        text direction "inbound|outbound"
+        text status "pending|downloaded|transcribed|analyzed|failed"
+        datetime created_at
+    }
+
+    TRANSCRIPTS {
+        text id PK "UUID"
+        text call_id FK UK "One per call"
+        text content "Full transcript"
+        text language "hi|en|hinglish"
+        json speaker_segments "Timestamped segments"
+        int word_count
+        text stt_provider "whisper|sarvam|assemblyai"
+        int processing_time_ms
+        datetime created_at
+    }
+
+    ANALYSES {
+        text id PK "UUID"
+        text call_id FK UK "One per call"
+        real overall_score "0-100"
+        json category_scores "Per-category scores"
+        json issues "Identified issues"
+        json recommendations "Improvement suggestions"
+        text summary "Brief summary"
+        text sentiment "positive|neutral|negative"
+        text llm_model "Model used"
+        int prompt_tokens
+        int completion_tokens
+        int processing_time_ms
+        datetime created_at
+    }
+
+    NOTIFICATIONS {
+        text id PK "UUID"
+        text call_id FK "Related call"
+        text user_id FK "Recipient"
+        text channel "whatsapp|email|console"
+        text message "Notification content"
+        text status "pending|sent|failed"
+        datetime sent_at
+        datetime created_at
+    }

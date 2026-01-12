@@ -1,0 +1,69 @@
+{
+  "name": "sales-call-qc",
+  "version": "1.0.0",
+  "description": "AI-Powered Sales Call Quality Control System - Local MVP",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "worker": "node src/workers/index.js",
+    "dev:all": "concurrently \"npm run dev\" \"npm run worker\"",
+    "db:init": "node scripts/init-database.js",
+    "db:migrate": "node scripts/migrate-database.js",
+    "db:seed": "node scripts/seed-database.js",
+    "db:reset": "node scripts/reset-database.js",
+    "tunnel": "ngrok http 3000",
+    "test": "jest",
+    "test:unit": "jest --testPathPattern=tests/unit",
+    "test:integration": "jest --testPathPattern=tests/integration",
+    "test:e2e": "jest --testPathPattern=tests/e2e",
+    "test:phase1": "jest --testPathPattern=tests/phase1",
+    "test:phase2": "jest --testPathPattern=tests/phase2",
+    "test:phase3": "jest --testPathPattern=tests/phase3",
+    "test:phase4": "jest --testPathPattern=tests/phase4",
+    "test:phase5": "jest --testPathPattern=tests/phase5",
+    "test:phase6": "jest --testPathPattern=tests/phase6",
+    "lint": "eslint src/",
+    "whisper:test": "node scripts/test-whisper.js",
+    "ollama:test": "node scripts/test-ollama.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "dotenv": "^16.3.1",
+    "better-sqlite3": "^9.2.2",
+    "bullmq": "^5.1.0",
+    "ioredis": "^5.3.2",
+    "uuid": "^9.0.1",
+    "axios": "^1.6.2",
+    "winston": "^3.11.0",
+    "date-fns": "^3.0.6",
+    "exceljs": "^4.4.0",
+    "csv-writer": "^1.6.0",
+    "joi": "^17.11.0",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "eslint": "^8.56.0",
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "sales",
+    "call-center",
+    "quality-control",
+    "ai",
+    "speech-to-text",
+    "llm",
+    "exotel"
+  ],
+  "author": "",
+  "license": "ISC"
+}

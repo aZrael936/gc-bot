@@ -1,0 +1,55 @@
+# Docker Compose for Local Development
+# Provides Redis for BullMQ job queue
+
+version: '3.8'
+
+services:
+  # Redis for job queue (BullMQ)
+  redis:
+    image: redis:7-alpine
+    container_name: sales-call-qc-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis Commander (optional - web UI for Redis)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: sales-call-qc-redis-ui
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    profiles:
+      - debug  # Only starts with: docker-compose --profile debug up
+
+volumes:
+  redis_data:
+    driver: local
+
+# Usage:
+# -----------------------------------------
+# Start Redis only:
+#   docker-compose up -d
+#
+# Start Redis with web UI:
+#   docker-compose --profile debug up -d
+#
+# View Redis UI:
+#   http://localhost:8081
+#
+# Stop all:
+#   docker-compose down
+#
+# Stop and remove data:
+#   docker-compose down -v

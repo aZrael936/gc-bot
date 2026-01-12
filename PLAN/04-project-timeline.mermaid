@@ -1,0 +1,51 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4F46E5'}}}%%
+
+gantt
+    title AI Sales Call QC - MVP Development Timeline
+    dateFormat  YYYY-MM-DD
+    excludes    weekends
+
+    section Phase 1: Foundation
+    Project Setup & Structure     :p1a, 2025-01-13, 1d
+    Docker + Redis Configuration  :p1b, after p1a, 1d
+    SQLite Database Schema        :p1c, after p1b, 1d
+    Express Server + BullMQ       :p1d, after p1c, 1d
+    Phase 1 Testing               :milestone, p1m, after p1d, 0d
+
+    section Phase 2: Call Ingestion
+    Exotel Webhook Controller     :p2a, after p1d, 1d
+    Signature Validation          :p2b, after p2a, 0.5d
+    ngrok Tunnel Setup            :p2c, after p2b, 0.5d
+    Download Worker               :p2d, after p2c, 2d
+    Mock Webhook + Testing        :p2e, after p2d, 1d
+    Phase 2 Testing               :milestone, p2m, after p2e, 0d
+
+    section Phase 3: Transcription
+    Whisper.cpp Installation      :p3a, after p2e, 1d
+    Node.js Whisper Wrapper       :p3b, after p3a, 1d
+    Transcription Worker          :p3c, after p3b, 2d
+    Language Detection            :p3d, after p3c, 1d
+    Speaker Diarization (Basic)   :p3e, after p3d, 1d
+    Phase 3 Testing               :milestone, p3m, after p3e, 0d
+
+    section Phase 4: AI Analysis
+    Ollama Setup + Models         :p4a, after p3e, 1d
+    Ollama Service Wrapper        :p4b, after p4a, 1d
+    Scoring Prompt Design         :p4c, after p4b, 1d
+    Analysis Worker               :p4d, after p4c, 2d
+    JSON Parser + Validation      :p4e, after p4d, 1d
+    Phase 4 Testing               :milestone, p4m, after p4e, 0d
+
+    section Phase 5: Output Layer
+    CSV Export Service            :p5a, after p4e, 1d
+    Excel Export (xlsx)           :p5b, after p5a, 1d
+    Notification Router           :p5c, after p5b, 1d
+    Daily Digest Reports          :p5d, after p5c, 1d
+    Phase 5 Testing               :milestone, p5m, after p5d, 0d
+
+    section Phase 6: Integration
+    End-to-End Test Suite         :p6a, after p5d, 1d
+    Simple Web Dashboard          :p6b, after p6a, 2d
+    API Documentation             :p6c, after p6b, 1d
+    Final Integration Testing     :p6d, after p6c, 1d
+    MVP Complete                  :milestone, p6m, after p6d, 0d
