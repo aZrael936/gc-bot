@@ -26,9 +26,11 @@
     "lint": "eslint src/",
     "whisper:test": "node scripts/test-whisper.js",
     "ollama:test": "node scripts/test-ollama.js",
-    "transcription:test": "node scripts/test-transcription.js"
+    "transcription:test": "node scripts/test-transcription.js",
+    "transcription:compare": "node scripts/compare-transcription-services.js"
   },
   "dependencies": {
+    "@google-cloud/speech": "^7.2.1",
     "axios": "^1.6.2",
     "better-sqlite3": "^9.2.2",
     "bullmq": "^5.1.0",
@@ -38,10 +40,12 @@
     "dotenv": "^16.3.1",
     "exceljs": "^4.4.0",
     "express": "^4.18.2",
+    "form-data": "^4.0.5",
     "groq-sdk": "^0.37.0",
     "helmet": "^7.1.0",
     "ioredis": "^5.3.2",
     "joi": "^17.11.0",
+    "microsoft-cognitiveservices-speech-sdk": "^1.47.0",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "uuid": "^9.0.1",
