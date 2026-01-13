@@ -1,32 +1,39 @@
 /**
  * Transcription Service
- * Handles audio transcription using Groq's Whisper API
+ * Handles audio transcription using ElevenLabs Scribe v2 API
+ *
+ * Best-in-class Malayalam accuracy (100% confidence vs Groq's poor performance)
+ * Features: 90+ languages, real-time, speaker diarization, word timestamps
  */
 
-const Groq = require("groq-sdk");
+const FormData = require("form-data");
+const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const logger = require("../utils/logger");
 
 class TranscriptionService {
   constructor() {
-    this.groq = null;
-    this.model = "whisper-large-v3-turbo";
+    this.apiKey = null;
+    this.model = "scribe_v2";
+    this.providerName = "elevenlabs";
+    this.baseUrl = "https://api.elevenlabs.io/v1";
+    this.maxFileSizeGB = 3;
   }
 
   /**
-   * Initialize Groq client
+   * Initialize ElevenLabs client
    */
   initialize() {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.ELEVENLABS_API_KEY;
 
     if (!apiKey) {
-      logger.warn("GROQ_API_KEY not set - transcription service unavailable");
+      logger.warn("ELEVENLABS_API_KEY not set - transcription service unavailable");
       return false;
     }
 
-    this.groq = new Groq({ apiKey });
-    logger.info("Transcription service initialized with Groq Whisper");
+    this.apiKey = apiKey;
+    logger.info("Transcription service initialized with ElevenLabs Scribe v2");
     return true;
   }
 
@@ -40,9 +47,9 @@ class TranscriptionService {
     const startTime = Date.now();
 
     // Ensure client is initialized
-    if (!this.groq) {
+    if (!this.apiKey) {
       if (!this.initialize()) {
-        throw new Error("Transcription service not configured - GROQ_API_KEY missing");
+        throw new Error("Transcription service not configured - ELEVENLABS_API_KEY missing");
       }
     }
 
@@ -51,45 +58,92 @@ class TranscriptionService {
       throw new Error(`Audio file not found: ${audioPath}`);
     }
 
+    // Validate format
+    if (!this.isValidFormat(audioPath)) {
+      throw new Error(`Unsupported format: ${path.extname(audioPath)}`);
+    }
+
     const fileStats = fs.statSync(audioPath);
     const fileSizeMB = fileStats.size / (1024 * 1024);
+    const fileSizeGB = fileSizeMB / 1024;
 
     logger.info("Starting transcription", {
       audioPath,
       fileSizeMB: fileSizeMB.toFixed(2),
       model: this.model,
+      provider: this.providerName,
+      language: options.language || "auto",
     });
 
-    // Check file size (Groq limit is 25MB)
-    if (fileSizeMB > 25) {
-      throw new Error(`Audio file too large: ${fileSizeMB.toFixed(2)}MB (max 25MB)`);
+    // Check file size (ElevenLabs limit is 3GB)
+    if (fileSizeGB > this.maxFileSizeGB) {
+      throw new Error(`Audio file too large: ${fileSizeMB.toFixed(2)}MB (max ${this.maxFileSizeGB}GB)`);
     }
 
     try {
-      // Create file stream for upload
-      const audioFile = fs.createReadStream(audioPath);
+      // Prepare form data
+      const formData = new FormData();
+      formData.append("file", fs.createReadStream(audioPath));
+      formData.append("model_id", this.model);
 
-      // Call Groq Whisper API
-      const transcription = await this.groq.audio.transcriptions.create({
-        file: audioFile,
-        model: this.model,
-        response_format: "verbose_json",
-        language: options.language || undefined, // Auto-detect if not specified
-        temperature: options.temperature || 0,
-      });
+      // Set language if specified
+      if (options.language) {
+        formData.append("language_code", options.language);
+      }
+
+      // Enable speaker diarization by default (great for call QC)
+      formData.append("diarize", "true");
+
+      // Enable word-level timestamps (default: true)
+      if (options.timestamps !== false) {
+        formData.append("timestamps_granularity", "word");
+      }
+
+      // Enable audio event tagging
+      formData.append("tag_audio_events", "true");
+
+      // Call ElevenLabs API
+      const response = await axios.post(
+        `${this.baseUrl}/speech-to-text`,
+        formData,
+        {
+          headers: {
+            "xi-api-key": this.apiKey,
+            ...formData.getHeaders(),
+          },
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+          timeout: 300000, // 5 minute timeout for large files
+        }
+      );
 
       const processingTime = Date.now() - startTime;
 
-      // Extract and format results
+      // Format response
+      const segments = (response.data.words || []).map((word, index) => ({
+        id: index,
+        start: word.start,
+        end: word.end,
+        text: word.text,
+        confidence: word.confidence || null,
+        speaker: word.speaker || null,
+      }));
+
+      // Calculate duration from last segment
+      const duration = segments.length > 0
+        ? segments[segments.length - 1].end
+        : 0;
+
       const result = {
-        text: transcription.text,
-        language: transcription.language,
-        duration: transcription.duration,
-        segments: this.formatSegments(transcription.segments || []),
-        wordCount: this.countWords(transcription.text),
+        text: response.data.text,
+        language: response.data.language_code,
+        duration,
+        segments,
+        wordCount: this.countWords(response.data.text),
+        confidence: response.data.language_probability || null,
         processingTimeMs: processingTime,
         model: this.model,
-        provider: "groq",
+        provider: this.providerName,
       };
 
       logger.info("Transcription completed", {
@@ -97,6 +151,7 @@ class TranscriptionService {
         duration: result.duration,
         wordCount: result.wordCount,
         processingTimeMs: processingTime,
+        confidence: result.confidence,
       });
 
       return result;
@@ -106,18 +161,22 @@ class TranscriptionService {
       logger.error("Transcription failed", {
         audioPath,
         error: error.message,
+        status: error.response?.status,
         processingTimeMs: processingTime,
       });
 
-      // Handle specific Groq errors
-      if (error.status === 401) {
-        throw new Error("Invalid GROQ_API_KEY");
+      // Handle specific errors
+      if (error.response?.status === 401) {
+        throw new Error("Invalid ELEVENLABS_API_KEY");
       }
-      if (error.status === 413) {
-        throw new Error("Audio file too large for Groq API");
+      if (error.response?.status === 413) {
+        throw new Error("Audio file too large for ElevenLabs API");
       }
-      if (error.status === 429) {
-        throw new Error("Groq API rate limit exceeded - try again later");
+      if (error.response?.status === 429) {
+        throw new Error("ElevenLabs API rate limit exceeded - try again later");
+      }
+      if (error.response?.status === 400) {
+        throw new Error(`ElevenLabs API error: ${error.response?.data?.detail || error.message}`);
       }
 
       throw error;
@@ -130,11 +189,13 @@ class TranscriptionService {
    * @returns {Array} - Formatted segments
    */
   formatSegments(segments) {
-    return segments.map((seg) => ({
-      id: seg.id,
+    return segments.map((seg, index) => ({
+      id: seg.id || index,
       start: seg.start,
       end: seg.end,
-      text: seg.text.trim(),
+      text: seg.text?.trim() || seg.text,
+      confidence: seg.confidence || null,
+      speaker: seg.speaker || null,
     }));
   }
 
@@ -153,15 +214,15 @@ class TranscriptionService {
    * @returns {boolean}
    */
   isAvailable() {
-    return !!process.env.GROQ_API_KEY;
+    return !!process.env.ELEVENLABS_API_KEY;
   }
 
   /**
-   * Get supported audio formats
+   * Get supported audio formats (ElevenLabs supports 10+ formats)
    * @returns {Array}
    */
   getSupportedFormats() {
-    return ["mp3", "mp4", "mpeg", "mpga", "m4a", "wav", "webm", "flac", "ogg"];
+    return ["mp3", "mp4", "mpeg", "mpga", "m4a", "wav", "webm", "flac", "ogg", "aac"];
   }
 
   /**

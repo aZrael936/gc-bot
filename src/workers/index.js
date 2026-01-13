@@ -111,7 +111,7 @@ const createWorkers = () => {
 
         // Check if transcription service is available
         if (!Transcription.isAvailable()) {
-          throw new Error("Transcription service not configured - GROQ_API_KEY missing");
+          throw new Error("Transcription service not configured - ELEVENLABS_API_KEY missing");
         }
 
         // Validate audio format
