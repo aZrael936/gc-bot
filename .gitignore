@@ -35,6 +35,7 @@ pnpm-debug.log*
 coverage/
 .nyc_output/
 *.lcov
+transcription-comparison-results.json
 
 # OS files
 .DS_Store
