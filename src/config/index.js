@@ -61,6 +61,12 @@ const config = {
     apiToken: process.env.EXOTEL_API_TOKEN,
     webhookUrl: process.env.EXOTEL_WEBHOOK_URL,
   },
+
+  // Groq configuration (for Whisper transcription)
+  groq: {
+    apiKey: process.env.GROQ_API_KEY,
+    model: process.env.GROQ_MODEL || "whisper-large-v3-turbo",
+  },
 };
 
 // Validate required configuration

@@ -162,6 +162,44 @@ class CallService {
   }
 
   /**
+   * Queue analysis job for call
+   * @param {string} callId - Call ID
+   * @returns {Object} - Job details
+   */
+  async queueAnalysisJob(callId) {
+    try {
+      const { queues } = require("../workers");
+
+      const job = await queues.analysis.add(
+        `analyze-${callId}`,
+        {
+          callId,
+          type: "call-analysis",
+          timestamp: new Date().toISOString(),
+        },
+        {
+          priority: 3,
+          attempts: 2,
+          backoff: {
+            type: "exponential",
+            delay: 15000,
+          },
+        }
+      );
+
+      logger.info("Analysis job queued", { callId, jobId: job.id });
+      return {
+        id: job.id,
+        name: job.name,
+        data: job.data,
+      };
+    } catch (error) {
+      logger.error("Error queuing analysis job", { callId, error });
+      throw error;
+    }
+  }
+
+  /**
    * Get calls with pagination and filtering
    * @param {Object} options - Query options
    * @returns {Object} - Paginated results
