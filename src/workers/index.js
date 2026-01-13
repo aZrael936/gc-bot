@@ -91,12 +91,81 @@ const createWorkers = () => {
   const transcriptionWorker = new Worker(
     queueConfig.queues.transcription,
     async (job) => {
-      logger.info(`🎙️ Processing transcription job: ${job.id}`, job.data);
-      // Placeholder - actual implementation in Phase 3
-      return {
-        status: "completed",
-        message: "Transcription worker placeholder",
-      };
+      const { callId } = job.data;
+      logger.info(`🎙️ Processing transcription job: ${job.id}`, { callId });
+
+      try {
+        // Get call details
+        const { Call, Transcription } = require("../services");
+        const { Transcript } = require("../models");
+
+        const call = await Call.getCallById(callId);
+
+        if (!call) {
+          throw new Error(`Call not found: ${callId}`);
+        }
+
+        if (!call.local_audio_path) {
+          throw new Error(`No audio file for call: ${callId}`);
+        }
+
+        // Check if transcription service is available
+        if (!Transcription.isAvailable()) {
+          throw new Error("Transcription service not configured - GROQ_API_KEY missing");
+        }
+
+        // Validate audio format
+        if (!Transcription.isValidFormat(call.local_audio_path)) {
+          throw new Error(`Unsupported audio format: ${call.local_audio_path}`);
+        }
+
+        // Perform transcription
+        const result = await Transcription.transcribe(call.local_audio_path);
+
+        // Save transcript to database
+        const transcript = Transcript.create({
+          call_id: callId,
+          content: result.text,
+          language: result.language,
+          speaker_segments: result.segments,
+          word_count: result.wordCount,
+          stt_provider: result.provider,
+          processing_time_ms: result.processingTimeMs,
+        });
+
+        // Update call status
+        await Call.updateCallStatus(callId, "transcribed");
+
+        // Queue analysis job
+        await Call.queueAnalysisJob(callId);
+
+        logger.info(`✅ Transcription completed for call: ${callId}`, {
+          transcriptId: transcript.id,
+          language: result.language,
+          wordCount: result.wordCount,
+        });
+
+        return {
+          status: "completed",
+          callId,
+          transcriptId: transcript.id,
+          language: result.language,
+          wordCount: result.wordCount,
+          message: "Transcription completed and analysis queued",
+        };
+      } catch (error) {
+        logger.error(`❌ Transcription failed for call: ${callId}`, error);
+
+        // Update call status to failed
+        try {
+          const { Call } = require("../services");
+          await Call.updateCallStatus(callId, "transcription_failed");
+        } catch (updateError) {
+          logger.error("Failed to update call status", updateError);
+        }
+
+        throw error;
+      }
     },
     {
       connection: queueConfig.connection,
