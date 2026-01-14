@@ -27,7 +27,8 @@
     "whisper:test": "node scripts/test-whisper.js",
     "ollama:test": "node scripts/test-ollama.js",
     "transcription:test": "node scripts/test-transcription.js",
-    "transcription:compare": "node scripts/compare-transcription-services.js"
+    "transcription:compare": "node scripts/compare-transcription-services.js",
+    "analysis:test": "node scripts/test-analysis.js"
   },
   "dependencies": {
     "@google-cloud/speech": "^7.2.1",

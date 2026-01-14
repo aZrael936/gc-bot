@@ -89,6 +89,19 @@ app.get("/health/detailed", async (req, res) => {
     logger.error("Redis health check failed:", error);
   }
 
+  // Check OpenRouter (analysis) service
+  try {
+    const { Analysis } = require("./services");
+    health.services.openrouter = Analysis.isAvailable() ? "ok" : "not_configured";
+    if (!Analysis.isAvailable()) {
+      health.warnings = health.warnings || [];
+      health.warnings.push("OpenRouter API not configured - analysis service unavailable");
+    }
+  } catch (error) {
+    health.services.openrouter = "error";
+    logger.error("OpenRouter health check failed:", error);
+  }
+
   // Set HTTP status based on overall health
   const statusCode = health.status === "ok" ? 200 : 503;
   res.status(statusCode).json(health);
@@ -97,17 +110,31 @@ app.get("/health/detailed", async (req, res) => {
 // Webhook routes
 app.use("/webhook", require("./routes/webhook.routes"));
 
-// API routes placeholder
+// Analysis routes (Phase 4)
+app.use("/api", require("./routes/analysis.routes"));
+
+// API routes info
 app.get("/api", (req, res) => {
   res.json({
-    message: "AI Sales Call QC API",
+    message: "AI Sales Call QC API - Sports Infrastructure Sales",
     version: require("../package.json").version,
     endpoints: {
       health: "/health",
       detailedHealth: "/health/detailed",
-      calls: "/api/calls (coming in Phase 2)",
-      webhooks: "/webhook/exotel",
-      mockWebhook: "/webhook/exotel/mock",
+      webhooks: {
+        exotel: "/webhook/exotel",
+        mockWebhook: "/webhook/exotel/mock",
+      },
+      analysis: {
+        getAnalysis: "GET /api/calls/:callId/analysis",
+        triggerAnalysis: "POST /api/calls/:callId/analyze",
+        reanalyze: "POST /api/calls/:callId/reanalyze",
+        report: "GET /api/calls/:callId/report",
+        listAll: "GET /api/analyses",
+        alerts: "GET /api/analyses/alerts",
+        statistics: "GET /api/analyses/statistics",
+        models: "GET /api/analyses/models",
+      },
     },
   });
 });

@@ -67,6 +67,21 @@ const config = {
     apiKey: process.env.GROQ_API_KEY,
     model: process.env.GROQ_MODEL || "whisper-large-v3-turbo",
   },
+
+  // OpenRouter configuration (for LLM analysis)
+  openrouter: {
+    apiKey: process.env.OPENROUTER_API_KEY,
+    model: process.env.OPENROUTER_MODEL || "deepseek/deepseek-chat",
+    fallbackModel: process.env.OPENROUTER_FALLBACK_MODEL || "deepseek/deepseek-chat",
+    baseUrl: "https://openrouter.ai/api/v1",
+  },
+
+  // LLM parameters
+  llm: {
+    provider: process.env.LLM_PROVIDER || "openrouter",
+    temperature: parseFloat(process.env.LLM_TEMPERATURE) || 0.3,
+    maxTokens: parseInt(process.env.LLM_MAX_TOKENS) || 2000,
+  },
 };
 
 // Validate required configuration
@@ -97,6 +112,13 @@ const validateConfig = () => {
     console.log(`   Exotel: Configured (Account SID: ${config.exotel.accountSid.substring(0, 8)}...)`);
   } else {
     console.log(`   Exotel: Not configured (optional for mock testing)`);
+  }
+
+  // Log OpenRouter configuration status
+  if (config.openrouter.apiKey) {
+    console.log(`   OpenRouter: Configured (Model: ${config.openrouter.model})`);
+  } else {
+    console.log(`   OpenRouter: Not configured (required for analysis)`);
   }
 };
 
