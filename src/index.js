@@ -9,6 +9,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
+const path = require("path");
 const config = require("./config");
 const logger = require("./utils/logger");
 
@@ -168,6 +169,19 @@ app.get("/api", (req, res) => {
   });
 });
 
+// Serve frontend static files
+app.use(express.static(path.join(__dirname, "..", "frontend")));
+
+// Serve frontend for root route
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "frontend", "index.html"));
+});
+
+// Dashboard route alias
+app.get("/dashboard", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "frontend", "index.html"));
+});
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
@@ -207,6 +221,7 @@ process.on("SIGINT", () => {
 const server = app.listen(config.port, config.host, () => {
   logger.info(`🚀 Server running on http://${config.host}:${config.port}`);
   logger.info(`📊 Environment: ${config.nodeEnv}`);
+  logger.info(`📈 Dashboard: http://${config.host}:${config.port}/dashboard`);
   logger.info(`🏥 Health check: http://${config.host}:${config.port}/health`);
   logger.info(`📋 API info: http://${config.host}:${config.port}/api`);
 });
