@@ -113,6 +113,11 @@ app.use("/webhook", require("./routes/webhook.routes"));
 // Analysis routes (Phase 4)
 app.use("/api", require("./routes/analysis.routes"));
 
+// Phase 5 routes - Output & Notification Layer
+app.use("/api/reports", require("./routes/report.routes"));
+app.use("/api/export", require("./routes/export.routes"));
+app.use("/api/notifications", require("./routes/notification.routes"));
+
 // API routes info
 app.get("/api", (req, res) => {
   res.json({
@@ -134,6 +139,30 @@ app.get("/api", (req, res) => {
         alerts: "GET /api/analyses/alerts",
         statistics: "GET /api/analyses/statistics",
         models: "GET /api/analyses/models",
+      },
+      reports: {
+        daily: "GET /api/reports/daily",
+        weekly: "GET /api/reports/weekly",
+        trends: "GET /api/reports/trends",
+        sendDigest: "POST /api/reports/daily/send",
+        agentReport: "GET /api/reports/agent/:agentId",
+      },
+      export: {
+        csv: "POST /api/export/csv",
+        excel: "POST /api/export/excel",
+        dailyReport: "POST /api/export/daily-report",
+        download: "GET /api/export/download/:filename",
+        listFiles: "GET /api/export/files",
+        deleteFile: "DELETE /api/export/files/:filename",
+      },
+      notifications: {
+        list: "GET /api/notifications",
+        statistics: "GET /api/notifications/statistics",
+        channels: "GET /api/notifications/channels",
+        test: "POST /api/notifications/test",
+        send: "POST /api/notifications/send",
+        settings: "PUT /api/notifications/settings",
+        preferences: "GET/PUT /api/notifications/preferences/:userId",
       },
     },
   });

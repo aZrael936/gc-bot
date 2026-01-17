@@ -119,12 +119,33 @@ try {
       id TEXT PRIMARY KEY,
       call_id TEXT,
       user_id TEXT,
-      channel TEXT CHECK(channel IN ('whatsapp', 'email', 'console')),
+      channel TEXT CHECK(channel IN ('telegram', 'whatsapp', 'email', 'console')),
+      type TEXT CHECK(type IN ('low_score_alert', 'critical_issue', 'daily_digest', 'custom')),
       message TEXT,
       status TEXT DEFAULT 'pending',
+      metadata TEXT,
       sent_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (call_id) REFERENCES calls(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
+
+  // User notification preferences
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_notification_preferences (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE,
+      telegram_enabled INTEGER DEFAULT 1,
+      telegram_chat_id TEXT,
+      email_enabled INTEGER DEFAULT 0,
+      console_enabled INTEGER DEFAULT 1,
+      alert_low_score INTEGER DEFAULT 1,
+      alert_critical_issue INTEGER DEFAULT 1,
+      daily_digest INTEGER DEFAULT 1,
+      low_score_threshold INTEGER DEFAULT 50,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
   `);
@@ -152,6 +173,10 @@ try {
     CREATE INDEX IF NOT EXISTS idx_transcripts_call_id ON transcripts(call_id);
     CREATE INDEX IF NOT EXISTS idx_analyses_call_id ON analyses(call_id);
     CREATE INDEX IF NOT EXISTS idx_analyses_overall_score ON analyses(overall_score);
+    CREATE INDEX IF NOT EXISTS idx_notifications_call_id ON notifications(call_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications(status);
+    CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
   `);
 
   // Insert default organization if it doesn't exist

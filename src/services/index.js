@@ -22,6 +22,30 @@ const {
   OpenRouter: OpenRouterInstance,
 } = require("./analysis");
 
+// Export services (Phase 5)
+const {
+  CsvExportService,
+  ExcelExportService,
+  CsvExport: CsvExportInstance,
+  ExcelExport: ExcelExportInstance,
+} = require("./export");
+
+// Notification services (Phase 5)
+const {
+  TelegramService,
+  ConsoleNotificationService,
+  NotificationRouter,
+  Telegram: TelegramInstance,
+  Console: ConsoleInstance,
+  Router: NotificationRouterInstance,
+} = require("./notification");
+
+// Report services (Phase 5)
+const {
+  DailyDigestService,
+  DailyDigest: DailyDigestInstance,
+} = require("./report");
+
 module.exports = {
   // Original services
   CallService,
@@ -43,4 +67,22 @@ module.exports = {
   OpenRouterService,
   Analysis: AnalysisInstance,
   OpenRouter: OpenRouterInstance,
+
+  // Export services (Phase 5)
+  CsvExportService,
+  ExcelExportService,
+  CsvExport: CsvExportInstance,
+  ExcelExport: ExcelExportInstance,
+
+  // Notification services (Phase 5)
+  TelegramService,
+  ConsoleNotificationService,
+  NotificationRouter,
+  Telegram: TelegramInstance,
+  Console: ConsoleInstance,
+  NotificationRouterInstance,
+
+  // Report services (Phase 5)
+  DailyDigestService,
+  DailyDigest: DailyDigestInstance,
 };

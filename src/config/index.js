@@ -82,6 +82,29 @@ const config = {
     temperature: parseFloat(process.env.LLM_TEMPERATURE) || 0.3,
     maxTokens: parseInt(process.env.LLM_MAX_TOKENS) || 2000,
   },
+
+  // Telegram configuration (for notifications)
+  telegram: {
+    botToken: process.env.TELEGRAM_BOT_TOKEN,
+    defaultChatId: process.env.TELEGRAM_CHAT_ID,
+  },
+
+  // Notification settings
+  notifications: {
+    enabled: process.env.NOTIFICATIONS_ENABLED !== "false",
+    channels: {
+      telegram: process.env.TELEGRAM_NOTIFICATIONS !== "false",
+      console: process.env.CONSOLE_NOTIFICATIONS !== "false",
+    },
+    alerts: {
+      lowScore: process.env.ALERT_LOW_SCORE !== "false",
+      criticalIssue: process.env.ALERT_CRITICAL_ISSUE !== "false",
+    },
+    digest: {
+      enabled: process.env.DAILY_DIGEST_ENABLED !== "false",
+      time: process.env.DAILY_DIGEST_TIME || "09:00", // 24hr format
+    },
+  },
 };
 
 // Validate required configuration
@@ -119,6 +142,13 @@ const validateConfig = () => {
     console.log(`   OpenRouter: Configured (Model: ${config.openrouter.model})`);
   } else {
     console.log(`   OpenRouter: Not configured (required for analysis)`);
+  }
+
+  // Log Telegram configuration status
+  if (config.telegram.botToken) {
+    console.log(`   Telegram: Configured (Chat ID: ${config.telegram.defaultChatId || "not set"})`);
+  } else {
+    console.log(`   Telegram: Not configured (will use mock mode for notifications)`);
   }
 };
 
