@@ -177,9 +177,90 @@ const createWorkers = () => {
   const analysisWorker = new Worker(
     queueConfig.queues.analysis,
     async (job) => {
-      logger.info(`🤖 Processing analysis job: ${job.id}`, job.data);
-      // Placeholder - actual implementation in Phase 4
-      return { status: "completed", message: "Analysis worker placeholder" };
+      const { callId, model, reanalyze } = job.data;
+      logger.info(`🤖 Processing analysis job: ${job.id}`, { callId, model });
+
+      try {
+        // Get services
+        const { Call, Analysis } = require("../services");
+        const config = require("../config");
+
+        const call = await Call.getCallById(callId);
+
+        if (!call) {
+          throw new Error(`Call not found: ${callId}`);
+        }
+
+        // Check if analysis service is available
+        if (!Analysis.isAvailable()) {
+          throw new Error("Analysis service not configured - OPENROUTER_API_KEY missing");
+        }
+
+        // Perform analysis
+        const result = await Analysis.analyzeCall(callId, {
+          model: model,
+          reanalyze: reanalyze || false,
+        });
+
+        // Update call status
+        await Call.updateCallStatus(callId, "analyzed");
+
+        // Check if alert needs to be triggered
+        if (result.alert_triggered) {
+          logger.warn("Low score alert triggered", {
+            callId,
+            score: result.overall_score,
+            threshold: config.scoring.thresholds.alert,
+          });
+
+          // Queue notification job
+          const { queues } = require("../workers");
+          await queues.notification.add(
+            `alert-${callId}`,
+            {
+              callId,
+              analysisId: result.id,
+              type: "low_score_alert",
+              score: result.overall_score,
+              summary: result.summary,
+              timestamp: new Date().toISOString(),
+            },
+            {
+              priority: 1, // High priority for alerts
+              attempts: 3,
+            }
+          );
+        }
+
+        logger.info(`✅ Analysis completed for call: ${callId}`, {
+          analysisId: result.id,
+          overallScore: result.overall_score,
+          sentiment: result.sentiment,
+          alertTriggered: result.alert_triggered,
+        });
+
+        return {
+          status: "completed",
+          callId,
+          analysisId: result.id,
+          overallScore: result.overall_score,
+          sentiment: result.sentiment,
+          classification: Analysis.getScoreClassification(result.overall_score),
+          message: "Analysis completed successfully",
+        };
+      } catch (error) {
+        logger.error(`❌ Analysis failed for call: ${callId}`, error);
+
+        // Update call status to failed
+        try {
+          const { Call } = require("../services");
+          await Call.updateCallStatus(callId, "analysis_failed");
+        } catch (updateError) {
+          logger.error("Failed to update call status", updateError);
+        }
+
+        throw error;
+      }
     },
     {
       connection: queueConfig.connection,
