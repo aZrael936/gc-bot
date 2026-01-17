@@ -9,6 +9,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
+const path = require("path");
 const config = require("./config");
 const logger = require("./utils/logger");
 
@@ -113,6 +114,11 @@ app.use("/webhook", require("./routes/webhook.routes"));
 // Analysis routes (Phase 4)
 app.use("/api", require("./routes/analysis.routes"));
 
+// Phase 5 routes - Output & Notification Layer
+app.use("/api/reports", require("./routes/report.routes"));
+app.use("/api/export", require("./routes/export.routes"));
+app.use("/api/notifications", require("./routes/notification.routes"));
+
 // API routes info
 app.get("/api", (req, res) => {
   res.json({
@@ -135,8 +141,45 @@ app.get("/api", (req, res) => {
         statistics: "GET /api/analyses/statistics",
         models: "GET /api/analyses/models",
       },
+      reports: {
+        daily: "GET /api/reports/daily",
+        weekly: "GET /api/reports/weekly",
+        trends: "GET /api/reports/trends",
+        sendDigest: "POST /api/reports/daily/send",
+        agentReport: "GET /api/reports/agent/:agentId",
+      },
+      export: {
+        csv: "POST /api/export/csv",
+        excel: "POST /api/export/excel",
+        dailyReport: "POST /api/export/daily-report",
+        download: "GET /api/export/download/:filename",
+        listFiles: "GET /api/export/files",
+        deleteFile: "DELETE /api/export/files/:filename",
+      },
+      notifications: {
+        list: "GET /api/notifications",
+        statistics: "GET /api/notifications/statistics",
+        channels: "GET /api/notifications/channels",
+        test: "POST /api/notifications/test",
+        send: "POST /api/notifications/send",
+        settings: "PUT /api/notifications/settings",
+        preferences: "GET/PUT /api/notifications/preferences/:userId",
+      },
     },
   });
+});
+
+// Serve frontend static files
+app.use(express.static(path.join(__dirname, "..", "frontend")));
+
+// Serve frontend for root route
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "frontend", "index.html"));
+});
+
+// Dashboard route alias
+app.get("/dashboard", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "frontend", "index.html"));
 });
 
 // 404 handler
@@ -178,6 +221,7 @@ process.on("SIGINT", () => {
 const server = app.listen(config.port, config.host, () => {
   logger.info(`🚀 Server running on http://${config.host}:${config.port}`);
   logger.info(`📊 Environment: ${config.nodeEnv}`);
+  logger.info(`📈 Dashboard: http://${config.host}:${config.port}/dashboard`);
   logger.info(`🏥 Health check: http://${config.host}:${config.port}/health`);
   logger.info(`📋 API info: http://${config.host}:${config.port}/api`);
 });
