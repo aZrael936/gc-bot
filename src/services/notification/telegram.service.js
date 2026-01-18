@@ -16,12 +16,14 @@ class TelegramService {
     this.baseUrl = this.botToken
       ? `https://api.telegram.org/bot${this.botToken}`
       : null;
-    this.mockMode = !this.botToken || config.nodeEnv === "development";
 
-    if (this.mockMode) {
-      logger.info("Telegram service running in MOCK mode");
+    if (!this.botToken) {
+      logger.warn("Telegram bot token not configured - messages will not be sent");
     } else {
-      logger.info("Telegram service configured with bot token");
+      logger.info("Telegram service initialized", {
+        chatId: this.defaultChatId,
+        hasToken: !!this.botToken
+      });
     }
   }
 
@@ -51,60 +53,95 @@ class TelegramService {
    * @returns {string} - Formatted message
    */
   buildAlertMessage(analysis, call = {}) {
-    const issues = analysis.issues || [];
-    const topIssues = issues.slice(0, 3).map((issue) => {
-      const category = issue.category || "General";
-      const description = issue.description || issue;
-      return `• ${category}: ${description}`;
-    });
-
     const lines = [
-      "🚨 *Low Score Alert*",
-      "────────────────────",
+      "🚨 LOW SCORE ALERT",
+      "─────────────────────────",
       "",
-      `👤 *Agent:* ${call.agent_id || "Unknown"}`,
-      `📞 *Call ID:* \`${analysis.call_id}\``,
-      `⏱ *Duration:* ${this.formatDuration(call.duration_seconds)}`,
-      `📊 *Score:* ${this.formatScore(analysis.overall_score)}`,
+      `👤 Agent: ${call.agent_id || "Unknown"}`,
+      `📞 Call: ${analysis.call_id}`,
+      `⏱️ Duration: ${this.formatDuration(call.duration_seconds)}`,
+      `📊 Score: ${this.formatScore(analysis.overall_score)}`,
+      `😐 Sentiment: ${analysis.sentiment || 'neutral'}`,
       "",
     ];
 
-    if (topIssues.length > 0) {
-      lines.push("*Issues:*");
-      lines.push(...topIssues);
-      lines.push("");
-    }
-
-    if (analysis.summary) {
-      const shortSummary = analysis.summary.length > 100
-        ? analysis.summary.substring(0, 100) + "..."
-        : analysis.summary;
-      lines.push(`📝 *Summary:* ${shortSummary}`);
-      lines.push("");
-    }
-
     // Add category scores breakdown
-    const categoryScores = analysis.category_scores || {};
+    const categoryScores = typeof analysis.category_scores === 'string'
+      ? JSON.parse(analysis.category_scores)
+      : (analysis.category_scores || {});
+
     if (Object.keys(categoryScores).length > 0) {
-      lines.push("*Category Scores:*");
+      lines.push("📋 Category Breakdown:");
       const categories = [
+        { key: "greeting_rapport", label: "Greeting" },
         { key: "greeting", label: "Greeting" },
-        { key: "need_discovery", label: "Need Discovery" },
-        { key: "needDiscovery", label: "Need Discovery" },
-        { key: "product_presentation", label: "Product Pres." },
-        { key: "productPresentation", label: "Product Pres." },
-        { key: "objection_handling", label: "Objection Hand." },
-        { key: "objectionHandling", label: "Objection Hand." },
+        { key: "requirement_discovery", label: "Requirements" },
+        { key: "need_discovery", label: "Needs" },
+        { key: "needDiscovery", label: "Needs" },
+        { key: "product_knowledge", label: "Product" },
+        { key: "product_presentation", label: "Presentation" },
+        { key: "productPresentation", label: "Presentation" },
+        { key: "objection_handling", label: "Objections" },
+        { key: "objectionHandling", label: "Objections" },
+        { key: "closing_next_steps", label: "Closing" },
         { key: "closing", label: "Closing" },
       ];
 
       const addedCategories = new Set();
-      for (const { key, label } of categories) {
+      for (const { key, label} of categories) {
         if (categoryScores[key] != null && !addedCategories.has(label)) {
-          lines.push(`• ${label}: ${categoryScores[key]}`);
+          // Extract score value - handle both number and object {score: number}
+          const scoreValue = typeof categoryScores[key] === 'object'
+            ? categoryScores[key].score
+            : categoryScores[key];
+
+          // Add emoji indicator
+          let emoji = '🔴';
+          if (scoreValue >= 85) emoji = '🟢';
+          else if (scoreValue >= 70) emoji = '🟡';
+          else if (scoreValue >= 50) emoji = '🟠';
+
+          lines.push(`  ${emoji} ${label}: ${scoreValue}`);
           addedCategories.add(label);
         }
       }
+      lines.push("");
+    }
+
+    // Parse and format issues properly
+    const issues = analysis.issues || [];
+    if (issues.length > 0) {
+      lines.push("⚠️ Key Issues:");
+      const topIssues = issues.slice(0, 3);
+
+      for (const issue of topIssues) {
+        // Extract detail from nested structure
+        let detail = '';
+        if (typeof issue === 'object') {
+          detail = issue.detail || issue.description || '';
+
+          // Add severity indicator
+          const severity = (issue.severity || '').toLowerCase();
+          const severityEmoji = severity === 'high' || severity === 'critical' ? '🔴' :
+                               severity === 'medium' ? '🟠' : '🟡';
+
+          if (detail) {
+            // Truncate if too long
+            const truncated = detail.length > 100 ? detail.substring(0, 100) + '...' : detail;
+            lines.push(`  ${severityEmoji} ${truncated}`);
+          }
+        }
+      }
+      lines.push("");
+    }
+
+    // Summary
+    if (analysis.summary) {
+      lines.push("📝 Summary:");
+      const summary = analysis.summary.length > 250
+        ? analysis.summary.substring(0, 250) + "..."
+        : analysis.summary;
+      lines.push(summary);
     }
 
     return lines.join("\n");
@@ -203,25 +240,43 @@ class TelegramService {
   async sendMessage(message, options = {}) {
     const {
       chatId = this.defaultChatId,
-      parseMode = "Markdown",
+      parseMode = null, // Disable Markdown by default to avoid parsing errors
       disableNotification = false,
     } = options;
 
-    if (this.mockMode) {
-      return this.mockSend(message, { chatId, parseMode });
+    if (!this.botToken) {
+      logger.warn("Telegram message not sent - bot token not configured", {
+        chatId,
+        messagePreview: message.substring(0, 100)
+      });
+      return {
+        success: false,
+        error: "Bot token not configured",
+        chatId,
+      };
     }
 
     if (!chatId) {
-      throw new Error("Telegram chat ID is required");
+      logger.error("Telegram message not sent - chat ID is required");
+      return {
+        success: false,
+        error: "Chat ID is required",
+      };
     }
 
     try {
-      const response = await axios.post(`${this.baseUrl}/sendMessage`, {
+      const payload = {
         chat_id: chatId,
         text: message,
-        parse_mode: parseMode,
         disable_notification: disableNotification,
-      });
+      };
+
+      // Only include parse_mode if specified
+      if (parseMode) {
+        payload.parse_mode = parseMode;
+      }
+
+      const response = await axios.post(`${this.baseUrl}/sendMessage`, payload);
 
       const result = {
         success: true,
@@ -230,48 +285,23 @@ class TelegramService {
         sentAt: new Date().toISOString(),
       };
 
-      logger.info("Telegram message sent", result);
+      logger.info("Telegram message sent successfully", result);
       return result;
     } catch (error) {
       logger.error("Failed to send Telegram message", {
         error: error.message,
+        response: error.response?.data,
         chatId,
       });
-      throw error;
+      return {
+        success: false,
+        error: error.message,
+        details: error.response?.data,
+        chatId,
+      };
     }
   }
 
-  /**
-   * Mock send for development
-   * @param {string} message - Message text
-   * @param {Object} options - Options
-   * @returns {Object} - Mock result
-   */
-  mockSend(message, options = {}) {
-    const mockResult = {
-      success: true,
-      mock: true,
-      messageId: `mock_${Date.now()}`,
-      chatId: options.chatId || "mock_chat",
-      sentAt: new Date().toISOString(),
-    };
-
-    // Log the message to console for development visibility
-    console.log("\n" + "═".repeat(60));
-    console.log("📱 TELEGRAM NOTIFICATION (MOCK MODE)");
-    console.log("═".repeat(60));
-    console.log(`Chat ID: ${options.chatId || "default"}`);
-    console.log("─".repeat(60));
-    // Convert markdown to console-friendly format
-    const consoleMessage = message
-      .replace(/\*/g, "")
-      .replace(/`/g, "");
-    console.log(consoleMessage);
-    console.log("═".repeat(60) + "\n");
-
-    logger.info("Telegram message sent (mock)", mockResult);
-    return mockResult;
-  }
 
   /**
    * Send low score alert
@@ -314,11 +344,10 @@ class TelegramService {
    * @returns {Object} - Test result
    */
   async testConnection() {
-    if (this.mockMode) {
+    if (!this.botToken) {
       return {
-        success: true,
-        mock: true,
-        message: "Telegram service is in mock mode",
+        success: false,
+        error: "Bot token not configured",
       };
     }
 
@@ -342,11 +371,10 @@ class TelegramService {
    * @returns {Object} - Chat info
    */
   async getChatInfo(chatId) {
-    if (this.mockMode) {
+    if (!this.botToken) {
       return {
-        success: true,
-        mock: true,
-        chatId,
+        success: false,
+        error: "Bot token not configured",
       };
     }
 
@@ -362,6 +390,7 @@ class TelegramService {
       return {
         success: false,
         error: error.message,
+        details: error.response?.data,
       };
     }
   }
