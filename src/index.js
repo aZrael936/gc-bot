@@ -12,6 +12,7 @@ const morgan = require("morgan");
 const path = require("path");
 const config = require("./config");
 const logger = require("./utils/logger");
+const { expressErrorHandler, NotFoundError } = require("./utils/error-handler");
 
 // Create Express application
 const app = express();
@@ -183,28 +184,12 @@ app.get("/dashboard", (req, res) => {
 });
 
 // 404 handler
-app.use((req, res) => {
-  res.status(404).json({
-    error: "Not Found",
-    message: `Route ${req.method} ${req.path} not found`,
-    timestamp: new Date().toISOString(),
-  });
+app.use((req, res, next) => {
+  next(new NotFoundError("Route", `${req.method} ${req.path}`));
 });
 
-// Global error handler
-app.use((error, req, res, next) => {
-  logger.error("Unhandled error:", error);
-
-  // Don't leak error details in production
-  const isDevelopment = config.nodeEnv === "development";
-
-  res.status(error.status || 500).json({
-    error: error.name || "InternalServerError",
-    message: isDevelopment ? error.message : "An unexpected error occurred",
-    ...(isDevelopment && { stack: error.stack }),
-    timestamp: new Date().toISOString(),
-  });
-});
+// Global error handler - uses centralized error handling
+app.use(expressErrorHandler);
 
 // Graceful shutdown
 process.on("SIGTERM", () => {
