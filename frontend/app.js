@@ -14,6 +14,9 @@ let sentimentChart = null;
 
 // State
 let currentData = null;
+let recentCalls = [];
+let callsPage = 1;
+const CALLS_PER_PAGE = 10;
 
 /**
  * Initialize the dashboard
@@ -27,8 +30,16 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load initial report
   loadReport();
 
+  // Load recent calls
+  loadRecentCalls();
+
   // Setup event listeners
   dateInput.addEventListener('change', loadReport);
+
+  // Close modal on escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeCallModal();
+  });
 });
 
 /**
@@ -537,4 +548,381 @@ function showToast(message, type = 'info') {
     toast.style.animation = 'slideIn 0.3s ease reverse';
     setTimeout(() => toast.remove(), 300);
   }, 4000);
+}
+
+// ===================================
+// Recent Calls Functions
+// ===================================
+
+/**
+ * Load recent calls from API
+ */
+async function loadRecentCalls() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/analyses?limit=${CALLS_PER_PAGE}&page=${callsPage}`);
+    const result = await response.json();
+
+    if (result.success && result.data) {
+      recentCalls = result.data.analyses || [];
+      renderRecentCalls();
+    } else {
+      // Try alternate endpoint
+      const altResponse = await fetch(`${API_BASE_URL}/analyses/alerts?limit=${CALLS_PER_PAGE}`);
+      const altResult = await altResponse.json();
+      if (altResult.success && altResult.data) {
+        recentCalls = altResult.data || [];
+        renderRecentCalls();
+      }
+    }
+  } catch (error) {
+    console.error('Error loading recent calls:', error);
+    renderRecentCallsEmpty();
+  }
+}
+
+/**
+ * Load more calls (pagination)
+ */
+async function loadMoreCalls() {
+  callsPage++;
+  try {
+    const response = await fetch(`${API_BASE_URL}/analyses?limit=${CALLS_PER_PAGE}&page=${callsPage}`);
+    const result = await response.json();
+
+    if (result.success && result.data && result.data.analyses) {
+      recentCalls = [...recentCalls, ...result.data.analyses];
+      renderRecentCalls();
+      showToast(`Loaded ${result.data.analyses.length} more calls`, 'success');
+    } else {
+      showToast('No more calls to load', 'info');
+    }
+  } catch (error) {
+    console.error('Error loading more calls:', error);
+    showToast('Failed to load more calls', 'error');
+  }
+}
+
+/**
+ * Render recent calls table
+ */
+function renderRecentCalls() {
+  const tbody = document.getElementById('recentCallsTable');
+
+  if (!recentCalls || recentCalls.length === 0) {
+    renderRecentCallsEmpty();
+    return;
+  }
+
+  tbody.innerHTML = recentCalls.map(call => {
+    const scoreClass = getScoreClass(call.overall_score);
+    const statusClass = getStatusClass(call.status || 'analyzed');
+    const sentimentIcon = getSentimentIcon(call.sentiment);
+
+    return `
+      <tr>
+        <td>
+          <span class="call-id" title="${call.call_id}">${truncateId(call.call_id)}</span>
+        </td>
+        <td>${escapeHtml(call.agent_id || 'Unknown')}</td>
+        <td>${formatDuration(call.duration_seconds)}</td>
+        <td>
+          <span class="score-badge">
+            <span class="score-dot ${scoreClass}"></span>
+            ${call.overall_score || '-'}
+          </span>
+        </td>
+        <td>
+          <span class="sentiment-badge ${call.sentiment || 'neutral'}">${sentimentIcon} ${call.sentiment || 'N/A'}</span>
+        </td>
+        <td>
+          <span class="status-badge ${statusClass}">${call.status || 'analyzed'}</span>
+        </td>
+        <td>
+          <button class="btn btn-sm btn-icon" onclick="viewCallDetails('${call.call_id}')" title="View Details">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/**
+ * Render empty state for recent calls
+ */
+function renderRecentCallsEmpty() {
+  const tbody = document.getElementById('recentCallsTable');
+  tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No recent calls found. Process some calls to see them here.</td></tr>';
+}
+
+/**
+ * Get status class
+ */
+function getStatusClass(status) {
+  switch (status) {
+    case 'analyzed': return 'success';
+    case 'transcribed': return 'info';
+    case 'downloaded': return 'info';
+    case 'received': return 'pending';
+    case 'failed':
+    case 'transcription_failed':
+    case 'analysis_failed': return 'error';
+    default: return 'info';
+  }
+}
+
+/**
+ * Get sentiment icon
+ */
+function getSentimentIcon(sentiment) {
+  switch (sentiment?.toLowerCase()) {
+    case 'positive': return '😊';
+    case 'negative': return '😞';
+    default: return '😐';
+  }
+}
+
+/**
+ * Truncate call ID for display
+ */
+function truncateId(id) {
+  if (!id) return '-';
+  if (id.length <= 12) return id;
+  return id.substring(0, 8) + '...';
+}
+
+/**
+ * Format duration in mm:ss
+ */
+function formatDuration(seconds) {
+  if (!seconds) return '-';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// ===================================
+// Call Detail Modal Functions
+// ===================================
+
+/**
+ * View call details
+ */
+async function viewCallDetails(callId) {
+  const modal = document.getElementById('callDetailModal');
+  const content = document.getElementById('callDetailContent');
+
+  // Show loading state
+  content.innerHTML = '<div class="modal-loading"><div class="spinner"></div><p>Loading call details...</p></div>';
+  modal.classList.add('active');
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/calls/${callId}/report`);
+    const result = await response.json();
+
+    if (result.success && result.data) {
+      renderCallDetails(result.data);
+    } else {
+      throw new Error(result.error || 'Failed to load call details');
+    }
+  } catch (error) {
+    console.error('Error loading call details:', error);
+    content.innerHTML = `<div class="modal-error"><p>Failed to load call details: ${error.message}</p></div>`;
+  }
+}
+
+/**
+ * Render call details in modal
+ */
+function renderCallDetails(data) {
+  const content = document.getElementById('callDetailContent');
+  const call = data.call || {};
+  const analysis = data.analysis || {};
+  const transcript = data.transcript || {};
+
+  const categoryScores = typeof analysis.category_scores === 'string'
+    ? JSON.parse(analysis.category_scores)
+    : analysis.category_scores || {};
+
+  const issues = typeof analysis.issues === 'string'
+    ? JSON.parse(analysis.issues)
+    : analysis.issues || [];
+
+  const recommendations = typeof analysis.recommendations === 'string'
+    ? JSON.parse(analysis.recommendations)
+    : analysis.recommendations || [];
+
+  content.innerHTML = `
+    <div class="call-detail">
+      <!-- Call Info -->
+      <div class="detail-section">
+        <h3>Call Information</h3>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="detail-label">Call ID</span>
+            <span class="detail-value">${call.id || analysis.call_id}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Agent</span>
+            <span class="detail-value">${call.agent_id || 'Unknown'}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Duration</span>
+            <span class="detail-value">${formatDuration(call.duration_seconds)}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Status</span>
+            <span class="status-badge ${getStatusClass(call.status)}">${call.status || 'analyzed'}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Analysis Summary -->
+      <div class="detail-section">
+        <h3>Analysis Summary</h3>
+        <div class="analysis-summary">
+          <div class="score-circle ${getScoreClass(analysis.overall_score)}">
+            <span class="score-value">${analysis.overall_score || '-'}</span>
+            <span class="score-label">Overall Score</span>
+          </div>
+          <div class="analysis-info">
+            <p><strong>Sentiment:</strong> <span class="sentiment-badge ${analysis.sentiment}">${getSentimentIcon(analysis.sentiment)} ${analysis.sentiment || 'N/A'}</span></p>
+            <p><strong>Summary:</strong> ${analysis.summary || 'No summary available'}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Category Scores -->
+      <div class="detail-section">
+        <h3>Category Scores</h3>
+        <div class="category-scores">
+          ${Object.entries(categoryScores).map(([cat, data]) => {
+            const score = typeof data === 'object' ? data.score : data;
+            const feedback = typeof data === 'object' ? data.feedback : '';
+            return `
+              <div class="category-item">
+                <div class="category-header">
+                  <span class="category-name">${formatCategoryName(cat)}</span>
+                  <span class="category-score ${getScoreClass(score)}">${score}/100</span>
+                </div>
+                <div class="category-bar">
+                  <div class="category-fill ${getScoreClass(score)}" style="width: ${score}%"></div>
+                </div>
+                ${feedback ? `<p class="category-feedback">${feedback}</p>` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Issues -->
+      ${issues.length > 0 ? `
+        <div class="detail-section">
+          <h3>Issues Found</h3>
+          <ul class="issues-list">
+            ${issues.map(issue => `
+              <li class="issue-item ${issue.severity || 'medium'}">
+                <span class="issue-severity">${issue.severity || 'medium'}</span>
+                <span class="issue-category">${issue.category || 'General'}</span>
+                <p class="issue-description">${issue.description}</p>
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+      ` : ''}
+
+      <!-- Recommendations -->
+      ${recommendations.length > 0 ? `
+        <div class="detail-section">
+          <h3>Recommendations</h3>
+          <ul class="recommendations-list">
+            ${recommendations.map(rec => `<li>${rec}</li>`).join('')}
+          </ul>
+        </div>
+      ` : ''}
+
+      <!-- Transcript -->
+      ${transcript.content ? `
+        <div class="detail-section">
+          <h3>Transcript</h3>
+          <div class="transcript-content">
+            <pre>${escapeHtml(transcript.content)}</pre>
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+/**
+ * Format category name for display
+ */
+function formatCategoryName(name) {
+  return name
+    .replace(/_/g, ' ')
+    .replace(/([A-Z])/g, ' $1')
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+    .trim();
+}
+
+/**
+ * Close call detail modal
+ */
+function closeCallModal() {
+  const modal = document.getElementById('callDetailModal');
+  modal.classList.remove('active');
+}
+
+// ===================================
+// Export Functions
+// ===================================
+
+/**
+ * Export data to CSV or Excel
+ */
+async function exportData(format) {
+  const dateInput = document.getElementById('dateInput');
+  const date = dateInput.value;
+
+  try {
+    showToast(`Generating ${format.toUpperCase()} export...`, 'info');
+
+    const response = await fetch(`${API_BASE_URL}/export/${format}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        startDate: date,
+        endDate: date,
+        includeTranscripts: false,
+        includeFullAnalysis: true,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      // Trigger download
+      const downloadUrl = `${API_BASE_URL}/export/download/${result.data.filename}`;
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = result.data.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showToast(`${format.toUpperCase()} export downloaded!`, 'success');
+    } else {
+      throw new Error(result.error || 'Export failed');
+    }
+  } catch (error) {
+    console.error('Export error:', error);
+    showToast(`Export failed: ${error.message}`, 'error');
+  }
 }
