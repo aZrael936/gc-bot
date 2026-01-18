@@ -272,12 +272,139 @@ const createWorkers = () => {
   const notificationWorker = new Worker(
     queueConfig.queues.notification,
     async (job) => {
-      logger.info(`📤 Processing notification job: ${job.id}`, job.data);
-      // Placeholder - actual implementation in Phase 5
-      return {
-        status: "completed",
-        message: "Notification worker placeholder",
-      };
+      const { callId, analysisId, type, score, summary } = job.data;
+      logger.info(`📤 Processing notification job: ${job.id}`, { callId, type, score });
+
+      try {
+        // Get services and models
+        const { NotificationRouterInstance } = require("../services");
+        const { Call, Analysis, Notification } = require("../models");
+
+        // Get call and analysis records
+        const call = callId ? Call.findById(callId) : null;
+        const analysis = analysisId
+          ? Analysis.findById(analysisId)
+          : callId
+            ? Analysis.findByCallId(callId)
+            : { call_id: callId, overall_score: score, summary };
+
+        if (!analysis && type !== "custom") {
+          throw new Error(`Analysis not found for notification: ${analysisId || callId}`);
+        }
+
+        let results;
+
+        // Route based on notification type
+        switch (type) {
+          case "low_score_alert":
+            results = await NotificationRouterInstance.sendLowScoreAlert(
+              analysis,
+              call || {},
+              {}
+            );
+            break;
+
+          case "critical_issue":
+            const issues = analysis.issues || [];
+            const criticalIssue = issues.find((i) =>
+              ["high", "critical"].includes(i.severity?.toLowerCase())
+            );
+            if (criticalIssue) {
+              results = await NotificationRouterInstance.sendCriticalIssueAlert(
+                analysis,
+                criticalIssue,
+                call || {},
+                {}
+              );
+            } else {
+              results = [{ channel: "none", type: "critical_issue", skipped: true }];
+            }
+            break;
+
+          case "daily_digest":
+            const { DailyDigest } = require("../services");
+            const digest = job.data.digest || (await DailyDigest.generateDigest());
+            results = await NotificationRouterInstance.sendDailyDigest(digest, {});
+            break;
+
+          case "custom":
+            const { title, message, channels } = job.data;
+            results = await NotificationRouterInstance.sendCustomNotification(
+              title || "Notification",
+              message || "",
+              { channels }
+            );
+            break;
+
+          default:
+            // Process analysis for automatic routing
+            results = await NotificationRouterInstance.processAnalysis(
+              analysis,
+              call || {},
+              {}
+            );
+        }
+
+        // Save notification records
+        const successCount = results.filter((r) => r.success).length;
+
+        for (const result of results) {
+          if (!result.skipped) {
+            Notification.create({
+              call_id: callId,
+              user_id: null,
+              channel: result.channel,
+              type: result.type || type,
+              message: summary || `Score: ${score}`,
+              status: result.success ? "sent" : "failed",
+              metadata: {
+                analysisId,
+                score,
+                mock: result.mock,
+                error: result.error,
+              },
+              sent_at: result.success ? new Date().toISOString() : null,
+            });
+          }
+        }
+
+        logger.info(`✅ Notification job completed: ${job.id}`, {
+          callId,
+          type,
+          channels: results.map((r) => r.channel),
+          successCount,
+        });
+
+        return {
+          status: "completed",
+          callId,
+          type,
+          results,
+          successCount,
+          message: `Notification sent to ${successCount} channel(s)`,
+        };
+      } catch (error) {
+        logger.error(`❌ Notification failed for job: ${job.id}`, error);
+
+        // Record failed notification
+        try {
+          const { Notification } = require("../models");
+          Notification.create({
+            call_id: callId,
+            user_id: null,
+            channel: "unknown",
+            type: type || "unknown",
+            message: summary || "Notification failed",
+            status: "failed",
+            metadata: { error: error.message },
+            sent_at: null,
+          });
+        } catch (recordError) {
+          logger.error("Failed to record notification failure", recordError);
+        }
+
+        throw error;
+      }
     },
     {
       connection: queueConfig.connection,

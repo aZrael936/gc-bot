@@ -28,7 +28,9 @@
     "ollama:test": "node scripts/test-ollama.js",
     "transcription:test": "node scripts/test-transcription.js",
     "transcription:compare": "node scripts/compare-transcription-services.js",
-    "analysis:test": "node scripts/test-analysis.js"
+    "analysis:test": "node scripts/test-analysis.js",
+    "e2e": "node scripts/run-e2e-test.js",
+    "e2e:full": "node tests/phase6/e2e-pipeline.test.js"
   },
   "dependencies": {
     "@google-cloud/speech": "^7.2.1",
