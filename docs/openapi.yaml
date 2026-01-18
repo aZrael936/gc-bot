@@ -1,0 +1,1289 @@
+openapi: 3.0.3
+info:
+  title: Sales Call QC API
+  description: |
+    AI-Powered Sales Call Quality Control System API
+
+    This API provides endpoints for:
+    - Processing sales call recordings via webhooks
+    - AI-powered transcription and analysis
+    - Quality scoring and alerts
+    - Report generation and export
+    - Notification management
+
+    ## Authentication
+    Currently, the API does not require authentication for local/development use.
+    For production, implement API key or JWT authentication.
+
+    ## Rate Limits
+    - Transcription: 10 requests/minute (ElevenLabs API limit)
+    - Analysis: 30 requests/minute (OpenRouter API limit)
+    - Export: 5 concurrent exports
+  version: 1.0.0
+  contact:
+    name: API Support
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+  - url: https://api.yourcompany.com
+    description: Production server (placeholder)
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Webhooks
+    description: External service webhooks (Exotel)
+  - name: Analysis
+    description: Call analysis and scoring endpoints
+  - name: Reports
+    description: Report generation endpoints
+  - name: Export
+    description: Data export endpoints
+  - name: Notifications
+    description: Notification management endpoints
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Basic health check
+      description: Returns basic health status of the service
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /health/detailed:
+    get:
+      tags:
+        - Health
+      summary: Detailed health check
+      description: Returns detailed health status including database, Redis, and external services
+      operationId: getDetailedHealth
+      responses:
+        '200':
+          description: All services healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailedHealthResponse'
+        '503':
+          description: One or more services degraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailedHealthResponse'
+
+  /webhook/exotel:
+    post:
+      tags:
+        - Webhooks
+      summary: Exotel call webhook
+      description: |
+        Receives call completion webhooks from Exotel.
+        Triggers the full processing pipeline: download → transcribe → analyze → notify
+      operationId: handleExotelWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExotelWebhookPayload'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ExotelWebhookPayload'
+      responses:
+        '200':
+          description: Webhook received and processing started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+        '400':
+          description: Invalid webhook payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /webhook/exotel/mock:
+    post:
+      tags:
+        - Webhooks
+      summary: Mock webhook for testing
+      description: |
+        Simulates an Exotel webhook for testing purposes.
+        Accepts a local file path or URL for the recording.
+      operationId: handleMockWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MockWebhookPayload'
+      responses:
+        '200':
+          description: Mock webhook processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+
+  /api/calls/{callId}/analysis:
+    get:
+      tags:
+        - Analysis
+      summary: Get call analysis
+      description: Returns the analysis results for a specific call
+      operationId: getCallAnalysis
+      parameters:
+        - $ref: '#/components/parameters/callId'
+      responses:
+        '200':
+          description: Analysis found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResponse'
+        '404':
+          description: Call or analysis not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/calls/{callId}/analyze:
+    post:
+      tags:
+        - Analysis
+      summary: Trigger call analysis
+      description: |
+        Triggers analysis for a call that has been transcribed.
+        Can run synchronously or asynchronously (queued).
+      operationId: analyzeCall
+      parameters:
+        - $ref: '#/components/parameters/callId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                async:
+                  type: boolean
+                  default: false
+                  description: Run analysis asynchronously
+                model:
+                  type: string
+                  description: LLM model to use (optional)
+      responses:
+        '200':
+          description: Analysis completed (sync) or queued (async)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AnalysisResponse'
+                  - $ref: '#/components/schemas/JobQueuedResponse'
+        '400':
+          description: Call not ready for analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/calls/{callId}/reanalyze:
+    post:
+      tags:
+        - Analysis
+      summary: Re-analyze call
+      description: Re-runs analysis for a call, optionally with a different model
+      operationId: reanalyzeCall
+      parameters:
+        - $ref: '#/components/parameters/callId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model:
+                  type: string
+                  description: LLM model to use for re-analysis
+      responses:
+        '200':
+          description: Re-analysis completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResponse'
+
+  /api/calls/{callId}/report:
+    get:
+      tags:
+        - Analysis
+      summary: Get formatted analysis report
+      description: Returns a human-readable formatted report for the call
+      operationId: getCallReport
+      parameters:
+        - $ref: '#/components/parameters/callId'
+      responses:
+        '200':
+          description: Report generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallReportResponse'
+
+  /api/analyses:
+    get:
+      tags:
+        - Analysis
+      summary: List all analyses
+      description: Returns paginated list of all analyses
+      operationId: listAnalyses
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+        - name: minScore
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+        - name: maxScore
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+        - name: sentiment
+          in: query
+          schema:
+            type: string
+            enum: [positive, neutral, negative]
+      responses:
+        '200':
+          description: Analyses list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysesListResponse'
+
+  /api/analyses/alerts:
+    get:
+      tags:
+        - Analysis
+      summary: Get low-scoring calls
+      description: Returns calls that scored below the alert threshold
+      operationId: getAlerts
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+        - name: threshold
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Alerts list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysesListResponse'
+
+  /api/analyses/statistics:
+    get:
+      tags:
+        - Analysis
+      summary: Get analysis statistics
+      description: Returns aggregate statistics for all analyses
+      operationId: getStatistics
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsResponse'
+
+  /api/analyses/models:
+    get:
+      tags:
+        - Analysis
+      summary: Get available LLM models
+      description: Returns list of available LLM models for analysis
+      operationId: getModels
+      responses:
+        '200':
+          description: Models list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  models:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        provider:
+                          type: string
+
+  /api/reports/daily:
+    get:
+      tags:
+        - Reports
+      summary: Get daily digest
+      description: Returns the daily digest report for a specific date
+      operationId: getDailyDigest
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Date for the report (defaults to today)
+      responses:
+        '200':
+          description: Daily digest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyDigestResponse'
+
+  /api/reports/weekly:
+    get:
+      tags:
+        - Reports
+      summary: Get weekly summary
+      description: Returns aggregated data for a week
+      operationId: getWeeklySummary
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 7
+      responses:
+        '200':
+          description: Weekly summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklySummaryResponse'
+
+  /api/reports/trends:
+    get:
+      tags:
+        - Reports
+      summary: Get trend analysis
+      description: Compares current period with previous period
+      operationId: getTrends
+      parameters:
+        - name: currentDays
+          in: query
+          schema:
+            type: integer
+            default: 7
+        - name: compareDays
+          in: query
+          schema:
+            type: integer
+            default: 7
+      responses:
+        '200':
+          description: Trend analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrendResponse'
+
+  /api/reports/daily/send:
+    post:
+      tags:
+        - Reports
+      summary: Send daily digest
+      description: Sends the daily digest via configured notification channels
+      operationId: sendDailyDigest
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                channels:
+                  type: array
+                  items:
+                    type: string
+                    enum: [telegram, console, email]
+      responses:
+        '200':
+          description: Digest sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  results:
+                    type: array
+                    items:
+                      type: object
+
+  /api/reports/agent/{agentId}:
+    get:
+      tags:
+        - Reports
+      summary: Get agent report
+      description: Returns performance report for a specific agent
+      operationId: getAgentReport
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Agent report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentReportResponse'
+
+  /api/export/csv:
+    post:
+      tags:
+        - Export
+      summary: Export to CSV
+      description: Exports analysis data to CSV format
+      operationId: exportCsv
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '200':
+          description: Export completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportResponse'
+
+  /api/export/excel:
+    post:
+      tags:
+        - Export
+      summary: Export to Excel
+      description: Exports analysis data to Excel format with charts
+      operationId: exportExcel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '200':
+          description: Export completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportResponse'
+
+  /api/export/download/{filename}:
+    get:
+      tags:
+        - Export
+      summary: Download export file
+      description: Downloads a previously generated export file
+      operationId: downloadExport
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File download
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: File not found
+
+  /api/export/files:
+    get:
+      tags:
+        - Export
+      summary: List export files
+      description: Lists all available export files
+      operationId: listExportFiles
+      responses:
+        '200':
+          description: Files list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        filename:
+                          type: string
+                        size:
+                          type: integer
+                        createdAt:
+                          type: string
+                          format: date-time
+
+  /api/notifications:
+    get:
+      tags:
+        - Notifications
+      summary: List notifications
+      description: Returns paginated list of sent notifications
+      operationId: listNotifications
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [sent, failed, pending]
+        - name: channel
+          in: query
+          schema:
+            type: string
+            enum: [telegram, console, email]
+      responses:
+        '200':
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationsListResponse'
+
+  /api/notifications/statistics:
+    get:
+      tags:
+        - Notifications
+      summary: Get notification statistics
+      description: Returns aggregate statistics for notifications
+      operationId: getNotificationStatistics
+      responses:
+        '200':
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  sent:
+                    type: integer
+                  failed:
+                    type: integer
+                  byChannel:
+                    type: object
+
+  /api/notifications/channels:
+    get:
+      tags:
+        - Notifications
+      summary: Get channel status
+      description: Returns status of all notification channels
+      operationId: getChannelStatus
+      responses:
+        '200':
+          description: Channel status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  telegram:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                      configured:
+                        type: boolean
+                  console:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+
+  /api/notifications/test:
+    post:
+      tags:
+        - Notifications
+      summary: Test notification channels
+      description: Sends test notifications to all configured channels
+      operationId: testNotifications
+      responses:
+        '200':
+          description: Test results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+
+  /api/notifications/send:
+    post:
+      tags:
+        - Notifications
+      summary: Send custom notification
+      description: Sends a custom notification through specified channels
+      operationId: sendNotification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - message
+              properties:
+                title:
+                  type: string
+                message:
+                  type: string
+                channels:
+                  type: array
+                  items:
+                    type: string
+                    enum: [telegram, console]
+      responses:
+        '200':
+          description: Notification sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  results:
+                    type: array
+                    items:
+                      type: object
+
+  /api/notifications/settings:
+    put:
+      tags:
+        - Notifications
+      summary: Update notification settings
+      description: Updates global notification settings
+      operationId: updateNotificationSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enableTelegram:
+                  type: boolean
+                enableConsole:
+                  type: boolean
+                alertOnLowScore:
+                  type: boolean
+                alertOnCriticalIssue:
+                  type: boolean
+                lowScoreThreshold:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+      responses:
+        '200':
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  settings:
+                    type: object
+
+  /api/notifications/preferences/{userId}:
+    get:
+      tags:
+        - Notifications
+      summary: Get user notification preferences
+      operationId: getUserPreferences
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPreferencesResponse'
+    put:
+      tags:
+        - Notifications
+      summary: Update user notification preferences
+      operationId: updateUserPreferences
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserPreferencesUpdate'
+      responses:
+        '200':
+          description: Preferences updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPreferencesResponse'
+
+components:
+  parameters:
+    callId:
+      name: callId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Unique call identifier
+
+    page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      description: Page number for pagination
+
+    limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+      description: Number of items per page
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, error]
+        timestamp:
+          type: string
+          format: date-time
+        environment:
+          type: string
+        version:
+          type: string
+
+    DetailedHealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/HealthResponse'
+        - type: object
+          properties:
+            services:
+              type: object
+              properties:
+                database:
+                  type: string
+                redis:
+                  type: string
+                openrouter:
+                  type: string
+            warnings:
+              type: array
+              items:
+                type: string
+
+    ExotelWebhookPayload:
+      type: object
+      required:
+        - CallSid
+        - RecordingUrl
+      properties:
+        CallSid:
+          type: string
+          description: Unique call identifier from Exotel
+        RecordingUrl:
+          type: string
+          format: uri
+          description: URL to the call recording
+        From:
+          type: string
+          description: Caller phone number
+        To:
+          type: string
+          description: Callee phone number
+        Direction:
+          type: string
+          enum: [incoming, outgoing]
+        Duration:
+          type: integer
+          description: Call duration in seconds
+        Status:
+          type: string
+        CallType:
+          type: string
+
+    MockWebhookPayload:
+      type: object
+      required:
+        - recording_url
+      properties:
+        recording_url:
+          type: string
+          description: URL or local file path to the recording
+        call_sid:
+          type: string
+        agent_id:
+          type: string
+        caller_number:
+          type: string
+        callee_number:
+          type: string
+        direction:
+          type: string
+          enum: [incoming, outgoing]
+        duration:
+          type: integer
+
+    WebhookResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        callId:
+          type: string
+        jobId:
+          type: string
+
+    AnalysisResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        call_id:
+          type: string
+        overall_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        category_scores:
+          type: object
+          properties:
+            greeting:
+              $ref: '#/components/schemas/CategoryScore'
+            need_discovery:
+              $ref: '#/components/schemas/CategoryScore'
+            product_presentation:
+              $ref: '#/components/schemas/CategoryScore'
+            objection_handling:
+              $ref: '#/components/schemas/CategoryScore'
+            closing:
+              $ref: '#/components/schemas/CategoryScore'
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/Issue'
+        recommendations:
+          type: array
+          items:
+            type: string
+        summary:
+          type: string
+        sentiment:
+          type: string
+          enum: [positive, neutral, negative]
+        llm_model:
+          type: string
+        processing_time_ms:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    CategoryScore:
+      type: object
+      properties:
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        feedback:
+          type: string
+
+    Issue:
+      type: object
+      properties:
+        category:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        description:
+          type: string
+        examples:
+          type: array
+          items:
+            type: string
+
+    CallReportResponse:
+      type: object
+      properties:
+        call:
+          type: object
+        transcript:
+          type: object
+        analysis:
+          $ref: '#/components/schemas/AnalysisResponse'
+        report:
+          type: object
+          properties:
+            scoreBreakdown:
+              type: object
+            performanceLevel:
+              type: string
+            keyStrengths:
+              type: array
+              items:
+                type: string
+            areasForImprovement:
+              type: array
+              items:
+                type: string
+
+    AnalysesListResponse:
+      type: object
+      properties:
+        analyses:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalysisResponse'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    StatisticsResponse:
+      type: object
+      properties:
+        totalCalls:
+          type: integer
+        averageScore:
+          type: number
+        scoreDistribution:
+          type: object
+        sentimentDistribution:
+          type: object
+        topIssues:
+          type: array
+          items:
+            type: object
+        trendData:
+          type: array
+          items:
+            type: object
+
+    DailyDigestResponse:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        totalCalls:
+          type: integer
+        avgScore:
+          type: number
+        minScore:
+          type: integer
+        maxScore:
+          type: integer
+        excellentCalls:
+          type: integer
+        goodCalls:
+          type: integer
+        lowScoreCalls:
+          type: integer
+        positiveSentiment:
+          type: integer
+        neutralSentiment:
+          type: integer
+        negativeSentiment:
+          type: integer
+        topIssues:
+          type: array
+          items:
+            type: object
+        alertsCount:
+          type: integer
+
+    WeeklySummaryResponse:
+      type: object
+      properties:
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        totalCalls:
+          type: integer
+        averageScore:
+          type: number
+        dailyBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyDigestResponse'
+
+    TrendResponse:
+      type: object
+      properties:
+        currentPeriod:
+          type: object
+        previousPeriod:
+          type: object
+        changes:
+          type: object
+          properties:
+            callVolume:
+              type: number
+            averageScore:
+              type: number
+            alertRate:
+              type: number
+
+    AgentReportResponse:
+      type: object
+      properties:
+        agentId:
+          type: string
+        totalCalls:
+          type: integer
+        averageScore:
+          type: number
+        callsByDate:
+          type: array
+          items:
+            type: object
+        strengths:
+          type: array
+          items:
+            type: string
+        areasForImprovement:
+          type: array
+          items:
+            type: string
+
+    ExportRequest:
+      type: object
+      properties:
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        includeTranscripts:
+          type: boolean
+          default: false
+        includeFullAnalysis:
+          type: boolean
+          default: true
+        format:
+          type: string
+          enum: [csv, excel]
+
+    ExportResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        filename:
+          type: string
+        downloadUrl:
+          type: string
+        recordCount:
+          type: integer
+        fileSize:
+          type: integer
+
+    NotificationsListResponse:
+      type: object
+      properties:
+        notifications:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              call_id:
+                type: string
+              channel:
+                type: string
+              type:
+                type: string
+              status:
+                type: string
+              sent_at:
+                type: string
+                format: date-time
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    UserPreferencesResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+        telegram_enabled:
+          type: boolean
+        telegram_chat_id:
+          type: string
+        email_enabled:
+          type: boolean
+        console_enabled:
+          type: boolean
+        alert_low_score:
+          type: boolean
+        alert_critical_issue:
+          type: boolean
+        daily_digest:
+          type: boolean
+        low_score_threshold:
+          type: integer
+
+    UserPreferencesUpdate:
+      type: object
+      properties:
+        telegram_enabled:
+          type: boolean
+        telegram_chat_id:
+          type: string
+        email_enabled:
+          type: boolean
+        alert_low_score:
+          type: boolean
+        alert_critical_issue:
+          type: boolean
+        daily_digest:
+          type: boolean
+        low_score_threshold:
+          type: integer
+
+    JobQueuedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        jobId:
+          type: string
+        status:
+          type: string
+          enum: [queued, processing]
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+        hasMore:
+          type: boolean
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+            timestamp:
+              type: string
+              format: date-time

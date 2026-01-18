@@ -170,6 +170,9 @@ app.get("/api", (req, res) => {
   });
 });
 
+// Serve API documentation
+app.use("/api-docs", express.static(path.join(__dirname, "..", "docs")));
+
 // Serve frontend static files
 app.use(express.static(path.join(__dirname, "..", "frontend")));
 
@@ -209,6 +212,7 @@ const server = app.listen(config.port, config.host, () => {
   logger.info(`📈 Dashboard: http://${config.host}:${config.port}/dashboard`);
   logger.info(`🏥 Health check: http://${config.host}:${config.port}/health`);
   logger.info(`📋 API info: http://${config.host}:${config.port}/api`);
+  logger.info(`📚 API docs: http://${config.host}:${config.port}/api-docs/api-docs.html`);
 });
 
 // Handle server errors
